@@ -1,0 +1,144 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  engine:
+    name: Engine syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m py_compile engine/*.py
+
+  build:
+    name: Build (unsigned compile check)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build for device (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project InstaFollowUp.xcodeproj \
+            -scheme InstaFollowUp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+  testflight:
+    name: Sign & upload to TestFlight
+    runs-on: macos-26
+    timeout-minutes: 45
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for App Store Connect credentials
+        id: creds
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ASC secrets not set — skipping TestFlight upload"
+          else
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write App Store Connect API key
+        if: steps.creds.outputs.have == 'true'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc" "$HOME/private_keys"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey.p8"
+          cp "$RUNNER_TEMP/asc/AuthKey.p8" "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Install XcodeGen
+        if: steps.creds.outputs.have == 'true'
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        if: steps.creds.outputs.have == 'true'
+        run: |
+          # stamp the run number BEFORE generating — xcodegen bakes CFBundleVersion into the plists
+          sed -i '' "s/^    CURRENT_PROJECT_VERSION: .*/    CURRENT_PROJECT_VERSION: $GITHUB_RUN_NUMBER/" project.yml
+          xcodegen generate
+
+      - name: Archive (cloud-managed signing)
+        if: steps.creds.outputs.have == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project InstaFollowUp.xcodeproj \
+            -scheme InstaFollowUp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/InstaFollowUp.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER
+
+      - name: Inspect the signed IPA (what TestFlight actually gets)
+        if: steps.creds.outputs.have == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/InstaFollowUp.xcarchive \
+            -exportOptionsPlist ExportOptions-inspect.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" > /dev/null
+          ls -la build/export
+          mkdir -p build/ipa && unzip -q -o build/export/*.ipa -d build/ipa
+          find build/ipa -maxdepth 4 -name '*.app' -o -maxdepth 4 -name '*.appex' -o -maxdepth 4 -name '*.mobileprovision' | sort
+          for app in build/ipa/Payload/InstaFollowUp.app; do
+            echo "=================== $app"
+            plutil -p "$app/Info.plist" | grep -E 'CFBundleIdentifier|CFBundleVersion|CFBundleShortVersionString|MinimumOSVersion|UIDeviceFamily|WKCompanionAppBundleIdentifier|WKApplication|WKRunsIndependently|DTPlatformName|DTSDKName' || true
+            codesign -dvv "$app" 2>&1 | grep -E 'Identifier|Authority|TeamIdentifier|Format' || true
+            codesign -d --entitlements :- "$app" 2>/dev/null | plutil -p - 2>/dev/null || codesign -d --entitlements :- "$app" 2>&1 | head -20
+            if [ -f "$app/embedded.mobileprovision" ]; then
+              security cms -D -i "$app/embedded.mobileprovision" > /tmp/prof.plist
+              plutil -p /tmp/prof.plist | grep -E '"Name"|"AppIDName"|"ExpirationDate"|"ProvisionsAllDevices"|"ProvisionedDevices"|"application-identifier"|"beta-reports-active"|"get-task-allow"|"Platform"|"IsXcodeManaged"' || true
+            else
+              echo "NO embedded.mobileprovision"
+            fi
+          done
+          echo "=================== IPA size"; du -h build/export/*.ipa
+
+      - name: Export & upload to App Store Connect
+        if: steps.creds.outputs.have == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath build/InstaFollowUp.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

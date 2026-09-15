@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.sly.instafollowup-bridge</string>
+  <!-- python runs as a child of /usr/local/bin/node on purpose: node holds Full Disk Access
+       (Messages chat.db) + Automation for Messages, and the grant flows to its children. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>-e</string>
+    <string>require('child_process').execFileSync('/opt/homebrew/bin/python3',['/Users/djsly/instaFollowUp/engine/bridge.py'],{stdio:'inherit'})</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/djsly/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key><string>/Users/djsly</string>
+  </dict>
+  <key>StartInterval</key><integer>120</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/tmp/instafollowup-bridge.log</string>
+  <key>StandardErrorPath</key><string>/tmp/instafollowup-bridge.log</string>
+</dict>
+</plist>
