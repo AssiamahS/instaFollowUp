@@ -58,7 +58,7 @@ VENUE_CATEGORIES = ("bar", "night club", "nightclub", "lounge", "restaurant", "p
                     "wine bar", "sports bar", "dance", "party", "entertainment", "hotel", "venue", "food & beverage", "concert")
 BANDS = {"business": (150, 60000), "people": (80, 6000)}
 ENRICH_GAP = 6.0            # seconds between profile lookups; instagram 429s a burst
-MAX_ENRICH = 30             # per run
+MAX_ENRICH = 20             # per run (each web read is a page load in Dia)
 STOP = re.compile(r"[^a-z0-9#@']+")
 
 
@@ -102,10 +102,16 @@ def taste_summary(taste, lane, n=12):
 
 # ---------- discovery ----------
 
+VENUE_RE = re.compile(r"\b(" + "|".join(re.escape(w) for w in VENUE_WORDS) + r")s?\b", re.I)
+
+
 def looks_like_venue(p):
+    """A place that books DJs: the category says so, or it's a business whose bio/name says so."""
     cat = (p.get("category") or "").lower()
-    bio = (p.get("biography") or "").lower() + " " + (p.get("full_name") or "").lower()
-    return any(k in cat for k in VENUE_CATEGORIES) or any(k in bio for k in VENUE_WORDS)
+    if any(k in cat for k in VENUE_CATEGORIES):
+        return True
+    text = (p.get("biography") or "") + " " + (p.get("full_name") or "")
+    return bool(p.get("is_business") or p.get("category")) and bool(VENUE_RE.search(text))
 
 
 def discover_business(ig, market, limit):
