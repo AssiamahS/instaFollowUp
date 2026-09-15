@@ -219,6 +219,10 @@ class Enricher:
 COMPANY_WORDS = ("shop", "store", "brand", "agency", "salon", "studio", "company", "business", "service", "boutique",
                  "clothing", "photograph", "media", "magazine", "marketing", "real estate", "gym", "fitness center",
                  "spa", "clinic", "school", "church", "organization", "nonprofit", "community", "website", "product")
+NAME_COMPANY_WORDS = ("realestate", "realtor", "realty", "photos", "photography", "wellness", "massage", "salon", "studio",
+                      "theapp", "collective", "shop", "boutique", "llc", "journal", "magazine", "agency", "official", "makers",
+                      "designs", "beauty", "lashes", "nails", "hair", "fitness", "coach", "clinic", "events", "media", "music",
+                      "records", "podcast", "church", "ministries", "foundation", "rentals", "homes", "properties")
 
 
 def qualify(lane, p):
@@ -243,6 +247,10 @@ def qualify(lane, p):
         return False, f"venue category {cat}"
     if any(k in cat for k in COMPANY_WORDS):
         return False, f"company category {cat}"
+    name = ((p.get("username") or "") + " " + (p.get("full_name") or "")).lower().replace("_", "").replace(".", "")
+    hit = next((k for k in NAME_COMPANY_WORDS if k in name), None)
+    if hit:
+        return False, f"business name ({hit})"
     if p.get("is_verified"):
         return False, "verified"
     return True, cat or "person"
