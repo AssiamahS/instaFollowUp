@@ -21,23 +21,7 @@ final class API: ObservableObject {
     }
 
     private func request(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> Data {
-        guard let url = URL(string: baseURL.trimmingCharacters(in: .whitespaces) + path) else {
-            throw Failure(message: "bad base URL")
-        }
-        var req = URLRequest(url: url, timeoutInterval: 90)
-        req.httpMethod = method
-        req.setValue(token, forHTTPHeaderField: "X-Token")
-        if let body {
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        }
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        if code >= 300 {
-            let msg = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "HTTP \(code)"
-            throw Failure(message: msg)
-        }
-        return data
+        try await raw(method, path, body: body)
     }
 
     private func get<T: Decodable>(_ path: String, as: T.Type) async throws -> T {

@@ -8,6 +8,8 @@ struct ContentView: View {
             InboxView()
                 .tabItem { Label("Inbox", systemImage: "bubble.left.and.bubble.right") }
                 .badge(api.status?.pending ?? 0)
+            LeadsView()
+                .tabItem { Label("Scout", systemImage: "binoculars") }
             OutreachView()
                 .tabItem { Label("Outreach", systemImage: "paperplane") }
             PlaybooksView()

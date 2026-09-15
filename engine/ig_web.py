@@ -10,6 +10,7 @@ NEVER launch a second Dia instance.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 
@@ -236,3 +237,69 @@ if __name__ == "__main__":
             print(f"  {m['from']:4} {m['text'][:80]!r}")
         print("composer present:", t.js("!!document.querySelector(%s)" % json.dumps(COMPOSER)))
     t.close()
+
+
+def _num(s):
+    s = (s or "").replace(",", "").strip()
+    mult = {"K": 1_000, "M": 1_000_000}.get(s[-1:].upper(), 1)
+    try:
+        return int(float(s.rstrip("kKmM")) * mult)
+    except ValueError:
+        return None
+
+
+# ---------- profile reading through the page (when the JSON endpoint is throttled) ----------
+
+def read_profile(tab, username):
+    """Profile header + first thumbnails from the rendered page. Same shape as ig_session.IG.profile().
+
+    Returns None for a missing/deactivated account ("Sorry, this page isn't available")."""
+    username = username.lstrip("@").strip()
+    tab.goto(f"{IG}/{username}/", settle=4)
+    for _ in range(12):
+        if tab.js("!!document.querySelector('header section') || document.body.innerText.includes(\"isn't available\")"):
+            break
+        time.sleep(0.5)
+    if tab.js("document.body.innerText.includes(\"Sorry, this page isn't available\")"):
+        return None
+    d = tab.js("""(() => {
+      const num = s => { s = (s || '').replace(/,/g, '').trim(); const m = s.match(/^([\\d.]+)\\s*([KM])?/i); if (!m) return null;
+        return Math.round(parseFloat(m[1]) * ({K: 1e3, M: 1e6}[(m[2] || '').toUpperCase()] || 1)); };
+      const header = document.querySelector('header');
+      if (!header) return null;
+      const out = {posts: null, followers: null, following: null};
+      for (const li of header.querySelectorAll('li, a[href$="/followers/"], a[href$="/following/"]')) {
+        const t = (li.innerText || '').replace(/\\n/g, ' ').toLowerCase();
+        const title = li.querySelector('[title]') ? li.querySelector('[title]').getAttribute('title') : null;
+        if (t.includes('post')) out.posts = num(t);
+        else if (t.includes('followers')) out.followers = num(title || t);
+        else if (t.includes('following')) out.following = num(t);
+      }
+      const lines = (header.innerText || '').split('\\n').map(s => s.trim()).filter(Boolean);
+      const stat = s => /(posts|followers|following)$/i.test(s);
+      const body = lines.filter(s => !stat(s) && s.toLowerCase() !== %s && !/^(follow|following|message|edit profile|\\+|·|…|verified)$/i.test(s));
+      const pic = header.querySelector('img') ? header.querySelector('img').src : null;
+      const thumbs = [...document.querySelectorAll('main a[href*="/p/"] img, main a[href*="/reel/"] img')].slice(0, 9)
+        .map(i => ({thumb: i.src, caption: (i.alt || '').slice(0, 300)}));
+      const isPrivate = document.body.innerText.includes('This account is private');
+      return {...out, lines: body, all_lines: lines, pic, thumbs, isPrivate, link: (header.querySelector('a[href^="http"]:not([href*="instagram.com"])') || {}).href || ''};
+    })()""" % json.dumps(username.lower()))
+    if not d:
+        raise WebError(f"@{username}: no profile header rendered")
+    lines = d["lines"]
+    # counts live in the header text as "568 posts / 20.3K followers / 734 following"
+    m = re.search(r"([\d.,]+[KM]?)\s+posts?\b.*?([\d.,]+[KM]?)\s+followers?\b.*?([\d.,]+[KM]?)\s+following\b",
+                  " ".join(d.get("all_lines") or []), re.I | re.S)
+    if m:
+        d["posts"], d["followers"], d["following"] = (_num(x) for x in m.groups())
+    full_name = lines[0] if lines else ""
+    category = lines[1] if len(lines) > 1 and len(lines[1]) < 40 and not any(ch in lines[1] for ch in ".!@#") else ""
+    bio = "\n".join(lines[(2 if category else 1):])[:400]
+    return {
+        "id": None, "username": username, "full_name": full_name, "biography": bio, "category": category,
+        "is_business": bool(category), "is_private": d["isPrivate"], "is_verified": False,
+        "followers": d["followers"], "following": d["following"], "posts": d["posts"], "pic": d["pic"],
+        "external_url": d["link"], "recent": [{"thumb": t["thumb"], "caption": t["caption"], "shortcode": None,
+                                                "taken_at": None, "likes": None, "location": None} for t in d["thumbs"]],
+        "via": "web",
+    }

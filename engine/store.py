@@ -28,7 +28,7 @@ DEFAULT = {
     "coaching_global": {},
     "settings": {
         "new_inbound_mode": "approve",      # someone new DMs me -> draft + ask
-        "outreach_mode": "auto",            # threads the engine opened itself carry on by themselves
+        "outreach_mode": "approve",         # openers wait for "ig yes"; flip a thread to auto once you trust it
         "followup_days": {"dj_pitch": [2, 5, 12], "personal": [3, 8], "default": [3]},
         "imessage_rowid": 0,
         "seen_message_ids": [],

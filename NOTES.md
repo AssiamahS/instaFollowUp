@@ -13,3 +13,10 @@
   (node holds Full Disk Access for chat.db + Messages automation).
 - post4me's approval_texter shares the iMessage thread and treats any plain reply as reel feedback; it now
   skips messages starting with ig / scipio / sc / [IG].
+- Scout: web_profile_info 429s after ~10 calls and stays throttled for a while; topsearch returns nothing for
+  multi-word queries (use fbsearch/web/top_serp, which returns posts with user + tagged location); tags/web_info
+  gives recent/top posters for a hashtag; friendships/{me}/followers|following paginate with next_max_id
+  (count param ignored, ~24/page). The profile HTML page embeds the VIEWER's data, not the target's; use
+  ig_web.read_profile (rendered header text "568 posts / 20.3K followers / 734 following").
+- followers baseline 2026-09-15: 1130 followers / 484 following / 21 not back. "Gone" = profile page says
+  "Sorry, this page isn't available" (deleted or deactivated; instagram doesn't tell which).

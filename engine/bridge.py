@@ -17,7 +17,6 @@ Thread modes: off (only alert me) | approve (draft, text me, send on "ig yes") |
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sqlite3
@@ -126,6 +125,10 @@ def deliver(st, t, text, kind):
         t["followups_sent"] += 1
     else:
         t["followups_sent"] = 0
+    if kind == "opener":
+        for item in st["outreach"]["queue"]:
+            if store.key_for(item["username"]) == t["key"] and item["status"] == "drafted":
+                item["status"], item["sent"] = "sent", now()
     store.log(st, f"  sent to @{t['username']} via {via}: {text[:80]!r}")
     return via
 
@@ -251,10 +254,25 @@ def run_command(st, cmd):
             return text_me(f"[IG] usage: ig playbook @user <{'|'.join(store.playbook_names())}>")
         store.get_thread(st, m.group(1))["playbook"] = name
         text_me(f"[IG] @{m.group(1)} now uses {name}")
+    elif word == "scout":
+        subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scout.py"), "--daily"],
+                         stdout=open("/tmp/instafollowup-scout.log", "a"), stderr=subprocess.STDOUT)
+        text_me("[IG] scouting all four markets now, I'll text you when the leads are in the app (10-20 min)")
+    elif word == "followers":
+        subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "followers.py")],
+                         stdout=open("/tmp/instafollowup-followers.log", "a"), stderr=subprocess.STDOUT)
+        text_me("[IG] checking followers now")
+    elif word in ("like", "pass"):
+        import scout
+        m = USER.search(rest)
+        if not m:
+            return text_me(f"[IG] usage: ig {word} @user")
+        outcome = scout.decide(m.group(1), word == "like", rest[m.end():].strip())
+        text_me(f"[IG] @{m.group(1)}: {outcome}" + (" (opener will be drafted for your yes)" if outcome == "queued" else ""))
     elif word in ("status", "st"):
         text_me(status_text(st))
     elif word == "help":
-        text_me("[IG] ig yes|no <fix>|say @user <text> | ig on|auto|off|mute @user | ig pitch @biz <note> | ig reach @user <note> | ig playbook @user dj_pitch | ig status")
+        text_me("[IG] ig yes|no <fix>|say @user <text> | ig on|auto|off|mute @user | ig pitch @biz <note> | ig reach @user <note> | ig like|pass @user | ig scout | ig followers | ig status")
     else:
         text_me(f"[IG] unknown command {word!r}. ig help")
 
@@ -384,14 +402,22 @@ def outreach(st):
             item["status"] = "needs_note"
             text_me(f"[IG] outreach @{u}: bot could not write an opener ({d['why']}). ig pitch @{u} <better note> to retry")
             continue
-        try:
-            deliver(st, t, d["text"], "opener")
-            item["status"], item["sent"] = "sent", now()
+        head = f"[IG] new {'pitch' if t['playbook'] == 'dj_pitch' else 'reach'} @{u}: {t['goal'][:120]}"
+        if t["mode"] == "auto":
+            try:
+                deliver(st, t, d["text"], "opener")
+                item["status"], item["sent"] = "sent", now()
+                o["sent_today"]["n"] += 1
+                text_me(f"{head}\nsent: {d['text']}")
+            except Exception as e:
+                item["status"], item["error"] = "failed", str(e)[:200]
+                text_me(f"[IG] outreach @{u} FAILED: {str(e)[:140]}")
+        else:
+            # middle man: the opener waits on the phone until "ig yes @user"
+            t["pending"] = {"text": d["text"], "kind": "opener", "created": now(), "why": d["why"]}
+            item["status"], item["drafted"] = "drafted", now()
             o["sent_today"]["n"] += 1
-            text_me(f"[IG] opened @{u} ({t['playbook']}, {t['mode']}): {d['text']}")
-        except Exception as e:
-            item["status"], item["error"] = "failed", str(e)[:200]
-            text_me(f"[IG] outreach @{u} FAILED: {str(e)[:140]}")
+            text_me(f"{head}\ndraft: {d['text']}\n{cmd_hint(t)}")
         return                                        # one per pass, keep it human-paced
 
 

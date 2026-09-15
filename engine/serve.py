@@ -92,6 +92,16 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, st["coaching_global"])
         if p == ["log"]:
             return self.send(200, st["log"][-200:])
+        if p == ["leads"]:
+            import scout
+            leads = list(st.get("leads", {}).values())
+            leads.sort(key=lambda c: (c["status"] != "new", -c.get("score", 0), -c.get("found", 0)))
+            return self.send(200, {"leads": [{k: v for k, v in c.items() if k != "id"} for c in leads[:300]],
+                                   "taste": {ln: scout.taste_summary(st.get("taste", {}).get(ln, {}), ln) for ln in ("business", "people")},
+                                   "last_run": st.get("scout", {}).get("last_run"), "markets": list(scout.MARKETS)})
+        if p == ["followers"]:
+            import followers
+            return self.send(200, followers.status())
         self.send(404, {"error": "unknown"})
 
     def do_DELETE(self):
@@ -111,8 +121,12 @@ class H(BaseHTTPRequestHandler):
         p = self.path.strip("/").split("/")
         b = self.body()
         try:
+            self._deferred = None
             with _busy, store.locked() as st:
-                return self.send(200, self.route_post(st, p, b))
+                out = self.route_post(st, p, b)
+            if self._deferred:
+                out = {"ok": True, "status": self._deferred()}
+            return self.send(200, out)
         except KeyError as e:
             return self.send(404, {"error": str(e)})
         except Exception as e:
@@ -191,6 +205,30 @@ class H(BaseHTTPRequestHandler):
             return st["coaching_global"]
         if p == ["run"]:
             threading.Thread(target=bridge.run, daemon=True).start()
+            return {"ok": True}
+        if p[0] == "leads" and len(p) == 2:
+            import scout
+            decision = (b.get("decision") or "").lower()
+            if decision not in ("like", "pass"):
+                raise KeyError("decision must be like or pass")
+            # scout.decide takes its own lock; release ours first
+            store.save(st)
+            self._deferred = lambda: scout.decide(p[1], decision == "like", (b.get("note") or "").strip())
+            return {"ok": True}
+        if p == ["scout", "run"]:
+            here = os.path.dirname(os.path.abspath(__file__))
+            args = [sys.executable, os.path.join(here, "scout.py")]
+            if b.get("lane") in ("business", "people") and b.get("market"):
+                args += ["--" + b["lane"], "--market", b["market"], "--limit", str(int(b.get("limit", 8)))]
+            else:
+                args.append("--daily")
+            import subprocess
+            subprocess.Popen(args, stdout=open("/tmp/instafollowup-scout.log", "a"), stderr=subprocess.STDOUT)
+            return {"ok": True, "started": args[2:]}
+        if p == ["followers", "run"]:
+            here = os.path.dirname(os.path.abspath(__file__))
+            import subprocess
+            subprocess.Popen([sys.executable, os.path.join(here, "followers.py")], stdout=open("/tmp/instafollowup-followers.log", "a"), stderr=subprocess.STDOUT)
             return {"ok": True}
         raise KeyError("unknown")
 
