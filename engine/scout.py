@@ -216,18 +216,36 @@ class Enricher:
             self.tab.close()
 
 
+COMPANY_WORDS = ("shop", "store", "brand", "agency", "salon", "studio", "company", "business", "service", "boutique",
+                 "clothing", "photograph", "media", "magazine", "marketing", "real estate", "gym", "fitness center",
+                 "spa", "clinic", "school", "church", "organization", "nonprofit", "community", "website", "product")
+
+
 def qualify(lane, p):
-    if not p or p.get("is_private"):
-        return False
+    """Returns (ok, why). People keep creator-type categories (digital creator, artist, model);
+    only venue-like or company-like categories are dropped."""
+    if not p:
+        return False, "no profile"
+    if p.get("is_private"):
+        return False, "private"
     lo, hi = BANDS[lane]
-    f = p.get("followers") or 0
-    if not (lo <= f <= hi) or (p.get("posts") or 0) < 6:
-        return False
+    f = p.get("followers")
+    if f is None:
+        return False, "no follower count"
+    if not (lo <= f <= hi):
+        return False, f"{f} followers outside {lo}-{hi}"
+    if (p.get("posts") or 0) < 6:
+        return False, f"only {p.get('posts')} posts"
+    cat = (p.get("category") or "").lower()
     if lane == "business":
-        return looks_like_venue(p)
-    if lane == "people":
-        return not p.get("is_business") and not p.get("is_verified") and not looks_like_venue(p)
-    return True
+        return (True, "venue") if looks_like_venue(p) else (False, f"not a venue ({cat or 'no category'})")
+    if any(k in cat for k in VENUE_CATEGORIES):
+        return False, f"venue category {cat}"
+    if any(k in cat for k in COMPANY_WORDS):
+        return False, f"company category {cat}"
+    if p.get("is_verified"):
+        return False, "verified"
+    return True, cat or "person"
 
 
 def run_lane(lane, market, limit=10):
@@ -245,7 +263,9 @@ def run_lane(lane, market, limit=10):
     for u, reason in fresh[:MAX_ENRICH]:
         p = en.get(u)
         throttled = en.api_dead
-        if not qualify(lane, p):
+        ok, why = qualify(lane, p)
+        if not ok:
+            print(f"  - @{u}: {why}")
             continue
         c = {**p, "lane": lane, "market": market, "reason": reason, "found": now(), "status": "new", "decision": None}
         c["score"] = score(taste, c)
