@@ -85,12 +85,16 @@ struct LeadsView: View {
                 }
                 if let first = queue.first {
                     LeadCard(lead: first, note: $note) { like in
+                        // advance immediately; the engine confirms in the background
+                        payload?.leads.removeAll { $0.username == first.username }
+                        let sent = note
+                        note = ""
                         Task {
-                            await api.decide(first.username, like: like, note: note)
-                            note = ""
-                            payload = await api.loadLeads()
+                            await api.decide(first.username, like: like, note: sent)
+                            if api.error == nil { payload = await api.loadLeads() }
                         }
                     }
+                    .id(first.username)
                     Text("\(queue.count) waiting").font(.caption).foregroundStyle(.secondary).padding(.bottom, 6)
                 } else {
                     ContentUnavailableView {
@@ -117,6 +121,9 @@ struct LeadsView: View {
             }
             .refreshable { payload = await api.loadLeads() }
             .task { payload = await api.loadLeads() }
+            .alert("Engine error", isPresented: Binding(get: { api.error != nil }, set: { _ in api.error = nil })) {
+                Button("OK") {}
+            } message: { Text(api.error ?? "") }
         }
     }
 }

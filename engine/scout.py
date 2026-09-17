@@ -29,6 +29,7 @@ import time
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import judge
 import store
 from clock import now
 
@@ -37,19 +38,19 @@ MARKETS = {
                                                    "philadelphia nightclub", "philly brewery events", "philadelphia event space",
                                                    "philly day party", "fishtown bar"],
                "business_tags": ["phillynightlife", "phillyevents", "phillybars", "phillyparty"],
-               "people_tags": ["phillygirls", "phillysummer", "philly", "phillyfitness"]},
+               "people_tags": ["phillyfitness", "phillygym", "phillygirls", "phillysummer", "fitphilly"]},
     "nj": {"city": "New Jersey", "queries": ["jersey city rooftop bar", "hoboken bar", "newark lounge", "north jersey hookah lounge",
                                              "new jersey nightclub", "jersey shore bar", "new brunswick bar", "nj event venue"],
            "business_tags": ["njnightlife", "jerseycitynightlife", "hobokennightlife", "njevents"],
-           "people_tags": ["jerseyshore", "njsummer", "jerseygirl", "hobokengirls"]},
+           "people_tags": ["njfitness", "jerseyfit", "jerseyshore", "njsummer", "hobokenfitness"]},
     "nyc": {"city": "New York City", "queries": ["brooklyn rooftop bar", "harlem lounge", "bronx hookah lounge", "queens bar",
                                                  "manhattan nightclub", "brooklyn day party", "nyc event space", "bushwick bar"],
             "business_tags": ["nycnightlife", "brooklynnightlife", "nycevents", "nycparty"],
-            "people_tags": ["nycgirls", "nycsummer", "brooklyngirls", "rockawaybeach"]},
+            "people_tags": ["nycfitness", "nycfitgirls", "brooklynfitness", "nycgirls", "rockawaybeach"]},
     "charlotte": {"city": "Charlotte", "queries": ["charlotte rooftop bar", "charlotte lounge", "charlotte hookah lounge",
                                                    "charlotte nightclub", "charlotte brewery", "uptown charlotte bar", "charlotte event venue"],
                   "business_tags": ["charlottenightlife", "cltnightlife", "charlotteevents", "cltparty"],
-                  "people_tags": ["charlottegirls", "cltgirls", "charlottenc", "cltsummer"]},
+                  "people_tags": ["charlottefitness", "cltfitness", "cltfit", "charlottegirls", "cltsummer"]},
 }
 VENUE_WORDS = ("bar", "lounge", "club", "rooftop", "restaurant", "hookah", "brewery", "venue", "event", "nightlife",
                "party", "promoter", "entertainment", "hall", "hotel", "grill", "tavern", "pub", "taproom", "cafe", "bistro",
@@ -216,7 +217,7 @@ class Enricher:
             self.tab.close()
 
 
-COMPANY_WORDS = ("shop", "store", "brand", "agency", "salon", "studio", "company", "business", "service", "boutique",
+COMPANY_WORDS = ("club", "social", "society", "group", "page", "shop", "store", "brand", "agency", "salon", "studio", "company", "business", "service", "boutique",
                  "clothing", "photograph", "media", "magazine", "marketing", "real estate", "gym", "fitness center",
                  "spa", "clinic", "school", "church", "organization", "nonprofit", "community", "website", "product")
 NAME_COMPANY_WORDS = ("realestate", "realtor", "realty", "photos", "photography", "wellness", "massage", "salon", "studio",
@@ -276,7 +277,18 @@ def run_lane(lane, market, limit=10):
             print(f"  - @{u}: {why}")
             continue
         c = {**p, "lane": lane, "market": market, "reason": reason, "found": now(), "status": "new", "decision": None}
-        c["score"] = score(taste, c)
+        if lane == "people":
+            try:
+                keep, jwhy, v = judge.judge(c)
+            except Exception as e:
+                print(f"  ? @{u}: judge failed ({str(e)[:80]}), skipping")
+                continue
+            if not keep:
+                print(f"  - @{u}: judge: {jwhy}")
+                continue
+            c["verdict"], c["judge"] = v, jwhy
+            c["reason"] = f"{jwhy} · {reason}"
+        c["score"] = score(taste, c) + (judge.bonus(c["verdict"]) if c.get("verdict") else 0)
         with store.locked() as st2:
             st2.setdefault("leads", {})[u] = c
         added += 1
@@ -308,14 +320,17 @@ def decide(username, yes, note=""):
             last = next((p.get("caption") for p in c.get("recent") or [] if p.get("caption")), "")
             if last:
                 auto_note += f" recent post: {last[:120]!r}"
-            st["outreach"]["queue"].append({"username": c["username"], "note": (note + " " if note else "") + auto_note,
-                                            "playbook": "dj_pitch" if c["lane"] == "business" else "personal",
-                                            "added": now(), "status": "queued", "from_scout": True})
+            already = any(store.key_for(i["username"]) == key and i["status"] in ("queued", "drafted", "sent")
+                          for i in st["outreach"]["queue"])
+            if not already:
+                st["outreach"]["queue"].append({"username": c["username"], "note": (note + " " if note else "") + auto_note,
+                                                "playbook": "dj_pitch" if c["lane"] == "business" else "personal",
+                                                "added": now(), "status": "queued", "from_scout": True})
             c["status"] = "queued"
         # re-score what's still waiting so the app shows the best first
         for o in st["leads"].values():
             if o["status"] == "new" and o["lane"] == c["lane"]:
-                o["score"] = score(taste, o)
+                o["score"] = score(taste, o) + (judge.bonus(o["verdict"]) if o.get("verdict") else 0)
         return c["status"]
 
 
