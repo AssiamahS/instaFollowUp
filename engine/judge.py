@@ -25,8 +25,10 @@ PROMPT = (
     "recent posts of the same account; ignore text overlays) and return ONLY a JSON object, no prose:\n"
     '{"body":"slim|athletic|average|curvy|plus","body_confidence":0-1,"full_body_visible":true|false,'
     '"swimwear":true|false,"curves":0-10,"fit":0-10,"photo_quality":0-10,"grainy":true|false,"group_photo":true|false,'
-    '"is_woman":true|false,"feminine":0-10,"is_person":true|false,"notes":"short"}\n'
+    '"is_woman":true|false,"feminine":0-10,"is_person":true|false,"has_kids":true|false,"promotes_business":true|false,"notes":"short"}\n'
     "is_person: false if the account is a business, brand, venue, meme page or the photos show no consistent person. "
+    "has_kids: true if the photos or text show she has children of her own (babies, toddlers, kids she is parenting, mom/mama in the text). "
+    "promotes_business: true if the account exists to sell or promote something (studio, coaching, podcast, salon, products, services, bookings). "
     "body: overall body size of the account owner using the clearest full-body photo (plus = visibly heavy/plus-size). "
     "fit: 10 = visibly athletic/toned/gym-fit, 0 = not at all. curves: how pronounced hips/glutes/hourglass figure are. "
     "photo_quality: 10 = sharp, well lit; 0 = blurry, grainy, dark. grainy = true if most photos are low quality. "
@@ -110,6 +112,10 @@ def decide(v, cfg=None):
     V = cfg or vision_cfg()
     if v.get("is_person") is False:
         return False, "not a person (business/page)"
+    if v.get("promotes_business") is True:
+        return False, "promotes a business"
+    if v.get("has_kids") is True:
+        return False, "has kids"
     fem = _num(v.get("feminine"))
     # hard rule from Sly: never a man on a card. Must be POSITIVELY a woman, not merely "not false".
     if v.get("is_woman") is not True or fem is None or fem < max(V["min_feminine"], 8):

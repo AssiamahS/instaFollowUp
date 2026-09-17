@@ -226,7 +226,14 @@ class Enricher:
 COMPANY_WORDS = ("club", "social", "society", "group", "page", "shop", "store", "brand", "agency", "salon", "studio", "company", "business", "service", "boutique",
                  "clothing", "photograph", "media", "magazine", "marketing", "real estate", "gym", "fitness center",
                  "spa", "clinic", "school", "church", "organization", "nonprofit", "community", "website", "product")
-NAME_COMPANY_WORDS = ("realestate", "realtor", "realty", "photos", "photography", "wellness", "massage", "salon", "studio",
+# people lane: words in the bio / name / category that mean "not who Sly is looking for"
+BIO_DENY = ("mom", "mama", "mommy", "mother", "momlife", "mom life", "kids", "my son", "my daughter", "boy mom", "girl mom",
+            "wife", "wifey", "married", "engaged", "fiance", "fiancé", "husband", "hubby", "taken",
+            "yoga", "pilates", "podcast", "studio", "salon", "coach", "coaching", "trainer", "owner", "founder", "ceo",
+            "booking", "bookings", "inquiries", "inquires", "collab", "brand ambassador", "realtor", "real estate",
+            "author", "speaker", "consultant", "agency", "boutique", "shop now", "order now", "dm to order", "menu")
+
+NAME_COMPANY_WORDS = ("yoga", "pilates", "podcast", "realestate", "realtor", "realty", "photos", "photography", "wellness", "massage", "salon", "studio",
                       "theapp", "collective", "shop", "boutique", "llc", "journal", "magazine", "agency", "official", "makers",
                       "designs", "beauty", "lashes", "nails", "hair", "fitness", "coach", "clinic", "events", "media", "music",
                       "records", "podcast", "church", "ministries", "foundation", "rentals", "homes", "properties")
@@ -257,6 +264,10 @@ def qualify(lane, p):
         return False, f"venue category {cat}"
     if any(k in cat for k in COMPANY_WORDS):
         return False, f"company category {cat}"
+    bio = ((p.get("biography") or "") + " " + (p.get("full_name") or "") + " " + cat).lower()
+    hit = next((k for k in BIO_DENY if re.search(r"(?<![a-z])" + re.escape(k) + r"(?![a-z])", bio)), None)
+    if hit:
+        return False, f"bio says '{hit}'"
     name = ((p.get("username") or "") + " " + (p.get("full_name") or "")).lower().replace("_", "").replace(".", "")
     hit = next((k for k in NAME_COMPANY_WORDS if k in name), None)
     if hit:
