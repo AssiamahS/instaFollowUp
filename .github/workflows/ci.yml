@@ -226,8 +226,23 @@ jobs:
           git checkout -- project.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/ipa web/install.html
-          git commit -m "build: ad hoc IPA build $GITHUB_RUN_NUMBER" || exit 0
-          git pull --rebase --autostash origin main
-          git push origin HEAD:main
+          # Two runs publishing at once used to collide: rebasing a binary IPA always conflicts
+          # and the install page silently stayed on the older build. Reset onto origin and
+          # re-apply the artifacts instead, retrying if someone else pushed meanwhile.
+          mkdir -p "$RUNNER_TEMP/pub"
+          cp web/ipa/InstaFollowUp.ipa web/ipa/manifest.plist web/install.html "$RUNNER_TEMP/pub/"
+          for i in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p web/ipa
+            cp "$RUNNER_TEMP/pub/InstaFollowUp.ipa" web/ipa/InstaFollowUp.ipa
+            cp "$RUNNER_TEMP/pub/manifest.plist" web/ipa/manifest.plist
+            cp "$RUNNER_TEMP/pub/install.html" web/install.html
+            git add web/ipa web/install.html
+            if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
+            git commit -m "build: ad hoc IPA build $GITHUB_RUN_NUMBER"
+            if git push origin HEAD:main; then break; fi
+            if [ "$i" = 5 ]; then echo "::error::could not publish the install page after 5 tries"; exit 1; fi
+            sleep $((5 * i))
+          done
           gh workflow run pages.yml --ref main
