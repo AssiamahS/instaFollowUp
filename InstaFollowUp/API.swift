@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 final class API: ObservableObject {
-    @AppStorage("baseURL") var baseURL: String = "http://100.97.199.99:8801"
+    @AppStorage("baseURL") var baseURL: String = "http://saints-macbook-air.tail40af16.ts.net:8801"
     @AppStorage("token") var token: String = ""
 
     @Published var threads: [DMThread] = []

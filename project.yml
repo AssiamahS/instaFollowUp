@@ -32,12 +32,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIViewControllerBasedStatusBarAppearance: true
         ITSAppUsesNonExemptEncryption: false
+        # plain http to the Mac over Tailscale (raw 100.x IP or the ts.net name). ONLY this key:
+        # adding granular keys next to it makes iOS ignore NSAllowsArbitraryLoads.
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          NSExceptionDomains:
-            tail40af16.ts.net:
-              NSIncludesSubdomains: true
-              NSExceptionAllowsInsecureHTTPLoads: true
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.assiamah.instafollowup

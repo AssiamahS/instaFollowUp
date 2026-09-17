@@ -8,7 +8,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Mac engine") {
-                    TextField("http://100.97.199.99:8801", text: $api.baseURL)
+                    TextField("http://saints-macbook-air.tail40af16.ts.net:8801", text: $api.baseURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     SecureField("token (~/.instafollowup/token on the Mac)", text: $api.token)
                     Button("Test connection") { Task { await api.refresh() } }
