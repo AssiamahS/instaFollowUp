@@ -111,8 +111,9 @@ def decide(v, cfg=None):
     if v.get("is_person") is False:
         return False, "not a person (business/page)"
     fem = _num(v.get("feminine"))
-    if v.get("is_woman") is False or (fem is not None and fem < V["min_feminine"]):
-        return False, f"not a woman (feminine {fem})"
+    # hard rule from Sly: never a man on a card. Must be POSITIVELY a woman, not merely "not false".
+    if v.get("is_woman") is not True or fem is None or fem < max(V["min_feminine"], 8):
+        return False, f"not clearly a woman (feminine {fem})"
     if v.get("group_photo") is True and _num(v.get("body_confidence"), 1) < V["min_body_conf"]:
         return False, "group photos, can't tell who"
     q = _num(v.get("photo_quality"))

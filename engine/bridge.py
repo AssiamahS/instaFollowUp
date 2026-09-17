@@ -381,8 +381,7 @@ def outreach(st):
     if o["sent_today"].get("date") != today:
         o["sent_today"] = {"date": today, "n": 0}
     hour = time.localtime(time.time() + (now() - time.time())).tm_hour
-    if not (o["hours"][0] <= hour < o["hours"][1]):
-        return
+    in_hours = o["hours"][0] <= hour < o["hours"][1]
     for item in o["queue"]:
         if item["status"] != "queued":
             continue
@@ -403,6 +402,9 @@ def outreach(st):
             text_me(f"[IG] outreach @{u}: bot could not write an opener ({d['why']}). ig pitch @{u} <better note> to retry")
             continue
         head = f"[IG] new {'pitch' if t['playbook'] == 'dj_pitch' else 'reach'} @{u}: {t['goal'][:120]}"
+        if t["mode"] == "auto" and not in_hours:
+            store.log(st, f"outreach: @{u} is auto, waiting for {o['hours'][0]}:00")
+            continue                                  # drafts for approval can happen any time; only auto sends keep hours
         if t["mode"] == "auto":
             try:
                 deliver(st, t, d["text"], "opener")

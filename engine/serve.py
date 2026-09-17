@@ -94,7 +94,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, st["log"][-200:])
         if p == ["leads"]:
             import scout
-            leads = list(st.get("leads", {}).values())
+            leads = [c for c in st.get("leads", {}).values()
+                     if not (c["lane"] == "people" and c["status"] == "new" and not (c.get("verdict") or {}).get("is_woman") is True)]
             leads.sort(key=lambda c: (c["status"] != "new", -c.get("score", 0), -c.get("found", 0)))
             return self.send(200, {"leads": [{k: v for k, v in c.items() if k != "id"} for c in leads[:300]],
                                    "taste": {ln: scout.taste_summary(st.get("taste", {}).get(ln, {}), ln) for ln in ("business", "people")},
