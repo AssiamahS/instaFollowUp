@@ -51,13 +51,17 @@ MARKETS = {
                                                    "charlotte nightclub", "charlotte brewery", "uptown charlotte bar", "charlotte event venue"],
                   "business_tags": ["charlottenightlife", "cltnightlife", "charlotteevents", "cltparty"],
                   "people_tags": ["charlottefitness", "cltfitness", "cltfit", "charlottegirls", "cltsummer"]},
+    # no city: pure photo lane. Posters under swimwear tags, then the judge decides.
+    "bikini": {"city": "anywhere", "queries": [], "business_tags": [],
+               "people_tags": ["bikini", "bikinigirl", "bikinibody", "bikinilife", "swimwear", "swimsuit", "beachbabe",
+                               "beachgirl", "poolside", "fitbikini", "bikinifitness", "bikinimodel", "summerbody", "beachbody"]},
 }
 VENUE_WORDS = ("bar", "lounge", "club", "rooftop", "restaurant", "hookah", "brewery", "venue", "event", "nightlife",
                "party", "promoter", "entertainment", "hall", "hotel", "grill", "tavern", "pub", "taproom", "cafe", "bistro",
                "kitchen", "speakeasy", "cigar", "sports bar", "beer garden", "pool", "yacht", "boat", "banquet")
 VENUE_CATEGORIES = ("bar", "night club", "nightclub", "lounge", "restaurant", "pub", "brewery", "event", "hookah", "cocktail",
                     "wine bar", "sports bar", "dance", "party", "entertainment", "hotel", "venue", "food & beverage", "concert")
-BANDS = {"business": (150, 60000), "people": (80, 6000)}
+BANDS = {"business": (150, 60000), "people": (80, 12000)}
 ENRICH_GAP = 6.0            # seconds between profile lookups; instagram 429s a burst
 MAX_ENRICH = 20             # per run (each web read is a page load in Dia)
 STOP = re.compile(r"[^a-z0-9#@']+")
@@ -126,6 +130,8 @@ def discover_business(ig, market, limit):
             out.append((u, reason))
 
     m = MARKETS[market]
+    if not m["queries"]:
+        return out
     for q in m["queries"]:
         try:
             d = ig.get(f"https://www.instagram.com/api/v1/fbsearch/web/top_serp/?query={q.replace(' ', '%20')}&search_surface=web_top_serp")
