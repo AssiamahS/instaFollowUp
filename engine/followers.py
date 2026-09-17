@@ -49,9 +49,13 @@ def load_snap():
 
 
 def account_gone(username):
-    """True when the profile page says it isn't available (deleted or deactivated)."""
+    """True when the profile page says it isn't available (deleted or deactivated).
+    None when it can't be checked (Dia not running with the debug port)."""
     import ig_web
-    tab = ig_web.Tab()
+    try:
+        tab = ig_web.Tab()
+    except Exception:
+        return None
     try:
         return ig_web.read_profile(tab, username) is None
     except ig_web.WebError:
@@ -73,13 +77,15 @@ def snapshot(check_gone=True):
     missing = {pk: u for pk, u in old.items() if pk not in followers}
     unfollowed, gone = {}, {}
     for pk, u in list(missing.items())[:25]:
-        if check_gone and account_gone(u["username"]):
+        g = account_gone(u["username"]) if check_gone else None
+        if g:
             gone[pk] = u
         else:
-            unfollowed[pk] = u
+            unfollowed[pk] = {**u, "unverified": g is None}
     ts = now()
-    for pk, u in new.items():
-        snap.setdefault("new", {})[pk] = {**u, "at": ts}
+    if not first:                                   # the baseline is not "1130 new followers"
+        for pk, u in new.items():
+            snap.setdefault("new", {})[pk] = {**u, "at": ts}
     for pk, u in unfollowed.items():
         snap.setdefault("unfollowed", {})[pk] = {**u, "at": ts}
     for pk, u in gone.items():
@@ -122,7 +128,7 @@ if __name__ == "__main__":
     ap.add_argument("--no-text", action="store_true")
     a = ap.parse_args()
     if a.status:
-        print(json.dumps(status(), indent=1)[:3000])
+        d = status(); print(json.dumps({k: (v if not isinstance(v, list) else v[:10]) for k, v in d.items()}, indent=1))
     else:
         msg = snapshot()
         print(msg)
