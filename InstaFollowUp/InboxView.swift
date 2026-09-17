@@ -26,12 +26,17 @@ struct InboxView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
                 }
+                NavigationLink(value: "__followers__") {
+                    Label("Followers: new, unfollowed, deleted", systemImage: "person.2")
+                }
                 ForEach(shown) { t in
                     NavigationLink(value: t.key) { ThreadRow(t: t) }
                 }
             }
             .navigationTitle("Inbox")
-            .navigationDestination(for: String.self) { key in ThreadView(key: key) }
+            .navigationDestination(for: String.self) { key in
+                if key == "__followers__" { FollowersView() } else { ThreadView(key: key) }
+            }
             .searchable(text: $search, prompt: "@username")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

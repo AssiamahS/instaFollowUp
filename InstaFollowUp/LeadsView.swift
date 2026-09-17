@@ -57,6 +57,7 @@ struct LeadsView: View {
     @State private var market = "all"
     @State private var note = ""
     @State private var showAll = false
+    @State private var showFollowers = false
 
     var queue: [Lead] {
         (payload?.leads ?? []).filter { $0.lane == lane && (market == "all" || $0.market == market) && (showAll || $0.status == "new") }
@@ -115,10 +116,11 @@ struct LeadsView: View {
                         ForEach(payload?.markets ?? [], id: \.self) { m in
                             Button("Scout \(m.uppercased()) · \(lane)") { Task { await api.scoutRun(lane: lane, market: m) } }
                         }
-                        NavigationLink("Followers") { FollowersView() }
+                        Button("Followers") { showFollowers = true }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
+            .navigationDestination(isPresented: $showFollowers) { FollowersView() }
             .refreshable { payload = await api.loadLeads() }
             .task { payload = await api.loadLeads() }
             .alert("Engine error", isPresented: Binding(get: { api.error != nil }, set: { _ in api.error = nil })) {
