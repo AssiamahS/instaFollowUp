@@ -245,8 +245,11 @@ def qualify(lane, p):
         return False, "no follower count"
     if not (lo <= f <= hi):
         return False, f"{f} followers outside {lo}-{hi}"
-    if (p.get("posts") or 0) < 6:
-        return False, f"only {p.get('posts')} posts"
+    posts = p.get("posts")
+    if posts is not None and posts < 6:
+        return False, f"only {posts} posts"
+    if posts is None and len(p.get("recent") or []) < 3:
+        return False, "post count unknown and fewer than 3 recent photos"
     cat = (p.get("category") or "").lower()
     if lane == "business":
         return (True, "venue") if looks_like_venue(p) else (False, f"not a venue ({cat or 'no category'})")
