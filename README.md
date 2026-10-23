@@ -1,5 +1,7 @@
 # instaFollowUp
 
+**Install:** open [assiamahs.github.io/instaFollowUp/install.html](https://assiamahs.github.io/instaFollowUp/install.html) in Safari on your iPhone.
+
 Instagram DMs that keep going when I don't. A Mac-side engine watches @sl.ysl.yy, writes the next
 message in my voice, and either sends it or texts me first. The iPhone app is the steering wheel.
 
