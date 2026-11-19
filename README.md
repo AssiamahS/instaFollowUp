@@ -43,6 +43,11 @@ NYC, Charlotte (edit `MARKETS` in scout.py: keyword searches, business hashtags,
 following, diffs against yesterday: new, unfollowed (profile still exists), gone (profile page no longer
 exists = deleted or deactivated), doesn't-follow-back, fans. Texts a one-line summary.
 
+After every run `engine/cloud.py` copies the snapshot to a Cloudflare D1 database (tables `lists`, `events`,
+`history`) so it can be read away from this Mac. It needs `~/.instafollowup/d1.json` with `account_id`,
+`database_id` and `token` (API token with D1 Edit); without that file nothing is pushed. `python3 engine/cloud.py`
+pushes the snapshot already on disk, `--check` verifies the config.
+
 ## Thread modes
 
 - **off** — alerts only. Every existing thread starts here.

@@ -98,6 +98,13 @@ def snapshot(check_gone=True):
     snap["history"] = snap["history"][-90:]
     os.makedirs(store.DIR, exist_ok=True)
     json.dump(snap, open(SNAP, "w"), indent=1)
+    try:                                            # copy to Cloudflare D1; never blocks the text
+        import cloud
+        pushed = cloud.push(snap, ts)
+        if pushed:
+            print(pushed)
+    except Exception as e:
+        print(f"cloud push failed: {e}")
     if first:
         return f"[IG] followers baseline: {len(followers)} followers, {len(following)} following, {len(snap['not_back'])} don't follow back."
     parts = [f"{len(followers)} followers ({len(new):+d} new" + (f", -{len(unfollowed)} unfollowed" if unfollowed else "") + (f", -{len(gone)} gone" if gone else "") + ")"]
